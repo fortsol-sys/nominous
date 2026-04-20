@@ -18,6 +18,28 @@ fn notifications_sent_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("notifications_sent.json"))
 }
 
+fn app_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("nominous.log"))
+}
+
+fn log_app(app: &AppHandle, level: &str, msg: &str) {
+    if let Ok(path) = app_log_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let entry = format!(
+            "[{}] [{}] {}\n",
+            chrono::Local::now().format("%Y-%m-%dT%H:%M:%S"),
+            level,
+            msg
+        );
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = f.write_all(entry.as_bytes());
+        }
+    }
+}
+
 fn parse_event(content: &str) -> Option<Event> {
     let trimmed = content.trim();
     if !trimmed.starts_with("---") {
@@ -119,11 +141,14 @@ pub fn default_settings() -> Settings {
 
 #[tauri::command]
 pub fn get_events(app: AppHandle) -> Result<Vec<Event>, String> {
-    load_events(&data_dir(&app)?)
+    let events = load_events(&data_dir(&app)?)?;
+    log_app(&app, "INFO", &format!("Loaded {} event(s)", events.len()));
+    Ok(events)
 }
 
 #[tauri::command]
 pub fn save_event(app: AppHandle, event: Event) -> Result<(), String> {
+    log_app(&app, "INFO", &format!("Saving event '{}'", event.name));
     write_event(&app, &event)
 }
 
@@ -132,6 +157,27 @@ pub fn delete_event(app: AppHandle, id: String) -> Result<(), String> {
     let path = data_dir(&app)?.join(format!("{}.md", id));
     if path.exists() {
         fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    log_app(&app, "INFO", &format!("Deleted event: {}", id));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_app_logs(app: AppHandle) -> Result<Vec<String>, String> {
+    let path = app_log_path(&app)?;
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let lines: Vec<String> = content.lines().rev().take(500).map(String::from).collect();
+    Ok(lines)
+}
+
+#[tauri::command]
+pub fn clear_app_logs(app: AppHandle) -> Result<(), String> {
+    let path = app_log_path(&app)?;
+    if path.exists() {
+        fs::write(path, "").map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -151,7 +197,9 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     let path = settings_path(&app)?;
     fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    fs::write(path, content).map_err(|e| e.to_string())
+    fs::write(path, content).map_err(|e| e.to_string())?;
+    log_app(&app, "INFO", "Settings saved");
+    Ok(())
 }
 
 #[tauri::command]
@@ -198,6 +246,7 @@ pub fn check_notifications(app: AppHandle) -> Result<(), String> {
                             .title("Nominous")
                             .body(&format!("{} — {} day(s) remaining", event.name, days_until))
                             .show();
+                        log_app(&app, "INFO", &format!("Notification sent: '{}' trigger={}", event.name, rule.trigger));
                         sent.insert(key, today.clone());
                     }
                 }

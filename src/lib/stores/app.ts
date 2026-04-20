@@ -99,6 +99,10 @@ function createApp() {
       update((s) => ({ ...s, selectedEvent: event }));
     },
 
+    goHome() {
+      update((s) => ({ ...s, selectedEvent: null }));
+    },
+
     openAdd(event?: NomEvent) {
       update((s) => ({ ...s, editingEvent: event ?? null, showAddModal: true }));
     },

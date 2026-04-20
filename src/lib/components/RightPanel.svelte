@@ -2,8 +2,10 @@
   import { app } from "../stores/app";
   import CountdownView from "./CountdownView.svelte";
   import TimelineView from "./TimelineView.svelte";
+  import CalendarView from "./CalendarView.svelte";
+  import HomeView from "./HomeView.svelte";
 
-  let view = $state<"countdown" | "timeline">("countdown");
+  let view = $state<"countdown" | "timeline" | "calendar">("countdown");
 </script>
 
 <main class="panel">
@@ -30,6 +32,10 @@
             class:active={view === "timeline"}
             onclick={() => (view = "timeline")}
           >Timeline</button>
+          <button
+            class:active={view === "calendar"}
+            onclick={() => (view = "calendar")}
+          >Calendar</button>
         </div>
         <button class="btn btn-ghost" onclick={() => app.openCommentModal()}>+ Comment</button>
         <button class="btn btn-ghost" onclick={() => app.openAdd(event)}>Edit</button>
@@ -45,16 +51,14 @@
     <div class="panel-content">
       {#if view === "countdown"}
         <CountdownView {event} />
-      {:else}
+      {:else if view === "timeline"}
         <TimelineView {event} />
+      {:else}
+        <CalendarView {event} />
       {/if}
     </div>
   {:else}
-    <div class="empty-state">
-      <div class="empty-icon">◷</div>
-      <p>Select an event to view its countdown</p>
-      <button class="btn btn-primary" onclick={() => app.openAdd()}>+ New Event</button>
-    </div>
+    <HomeView />
   {/if}
 </main>
 
@@ -138,22 +142,4 @@
     padding: 32px 40px;
   }
 
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    color: var(--text-muted);
-  }
-
-  .empty-icon {
-    font-size: 64px;
-    opacity: 0.3;
-  }
-
-  .empty-state p {
-    font-size: 15px;
-  }
 </style>

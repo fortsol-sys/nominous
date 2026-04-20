@@ -12,6 +12,8 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::check_notifications,
+            commands::get_app_logs,
+            commands::clear_app_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nominous");

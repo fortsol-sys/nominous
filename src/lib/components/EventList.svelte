@@ -1,15 +1,35 @@
 <script lang="ts">
   import { app } from "../stores/app";
+  import type { NomEvent } from "../types";
   import EventCard from "./EventCard.svelte";
 
   let collapsed = $state(false);
   let search = $state("");
+
+  const now = new Date();
 
   const filtered = $derived(
     $app.events.filter((e) =>
       e.name.toLowerCase().includes(search.toLowerCase())
     )
   );
+
+  const activeFiltered = $derived(filtered.filter((e) => new Date(e.target_date) >= now));
+  const doneFiltered = $derived(filtered.filter((e) => new Date(e.target_date) < now));
+
+  const grouped = $derived.by(() => {
+    const map = new Map<string, NomEvent[]>();
+    for (const e of activeFiltered) {
+      const cat = e.category || "Uncategorized";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(e);
+    }
+    return map;
+  });
+
+  function catColor(name: string) {
+    return $app.settings?.categories.find((c) => c.name === name)?.color ?? "#6366f1";
+  }
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -24,7 +44,7 @@
 
   <div class="sidebar-inner">
     <div class="sidebar-header">
-      <span class="app-title">Nominous</span>
+      <button class="app-title" onclick={() => app.goHome()}>Nominous</button>
       <div class="header-actions">
         <button
           class="btn-ghost icon-btn"
@@ -52,15 +72,41 @@
     </div>
 
     <div class="event-list">
-      {#each filtered as event (event.id)}
-        <EventCard
-          {event}
-          selected={$app.selectedEvent?.id === event.id}
-          onclick={() => app.selectEvent(event)}
-        />
-      {:else}
+      {#if filtered.length === 0}
         <p class="empty">No events yet.</p>
-      {/each}
+      {:else}
+        {#each [...grouped.entries()] as [cat, events]}
+          {@const color = catColor(cat)}
+          <div class="cat-group">
+            <div class="cat-label">
+              <div class="cat-dot" style="background:{color}"></div>
+              <span class="cat-name">{cat}</span>
+            </div>
+            {#each events as event (event.id)}
+              <EventCard
+                {event}
+                selected={$app.selectedEvent?.id === event.id}
+                onclick={() => app.selectEvent(event)}
+              />
+            {/each}
+          </div>
+        {/each}
+        {#if doneFiltered.length > 0}
+          <div class="cat-group">
+            <div class="cat-label">
+              <div class="cat-dot done-dot"></div>
+              <span class="cat-name">Done</span>
+            </div>
+            {#each doneFiltered as event (event.id)}
+              <EventCard
+                {event}
+                selected={$app.selectedEvent?.id === event.id}
+                onclick={() => app.selectEvent(event)}
+              />
+            {/each}
+          </div>
+        {/if}
+      {/if}
     </div>
 
     <div class="sidebar-footer">
@@ -156,6 +202,46 @@
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
+    padding: 0;
+    border-radius: 0;
+    transition: color 0.15s;
+  }
+
+  .app-title:hover {
+    color: var(--accent);
+    background: none;
+  }
+
+  .cat-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .cat-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 3px;
+  }
+
+  .cat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .done-dot {
+    background: var(--text-muted);
+  }
+
+  .cat-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
   }
 
   .icon-btn {

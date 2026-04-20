@@ -11,8 +11,46 @@
     return () => clearInterval(id);
   });
 
-  const start = $derived(new Date(event.created_at).getTime());
+  const startDate = $derived(new Date(event.created_at));
+  const start = $derived(startDate.getTime());
   const end = $derived(new Date(event.target_date).getTime());
+  const totalDays = $derived(Math.round((end - start) / 86400000));
+
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const axisTicks = $derived.by(() => {
+    const ticks: { label: string; pct: number }[] = [];
+    if (totalDays <= 10) return ticks;
+
+    if (totalDays > 60) {
+      let cur = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+      while (cur.getTime() < end) {
+        const p = pct(cur.getTime());
+        if (p > 3 && p < 97) {
+          const lbl = cur.getMonth() === 0
+            ? `${MONTHS_SHORT[cur.getMonth()]} '${String(cur.getFullYear()).slice(2)}`
+            : MONTHS_SHORT[cur.getMonth()];
+          ticks.push({ label: lbl, pct: p });
+        }
+        cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      }
+    } else {
+      const firstMonday = new Date(startDate);
+      firstMonday.setDate(firstMonday.getDate() + (8 - firstMonday.getDay()) % 7);
+      let cur = firstMonday;
+      while (cur.getTime() < end) {
+        const p = pct(cur.getTime());
+        if (p > 3 && p < 97) {
+          ticks.push({
+            label: cur.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+            pct: p,
+          });
+        }
+        cur = new Date(cur.getTime() + 7 * 86400000);
+      }
+    }
+    return ticks;
+  });
   const total = $derived(end - start);
   const elapsed = $derived(now.getTime() - start);
   const progress = $derived(Math.min(100, Math.max(0, (elapsed / total) * 100)));
@@ -103,6 +141,16 @@
           </div>
         {/if}
       </div>
+    {#if axisTicks.length > 0}
+      <div class="axis-row">
+        {#each axisTicks as tick}
+          <div class="axis-tick" style="left:{tick.pct}%">
+            <div class="tick-mark"></div>
+            <span class="tick-label">{tick.label}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
     </div>
 
     <div class="progress-label">
@@ -262,6 +310,33 @@
   .now-label {
     font-size: 10px;
     color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .axis-row {
+    position: relative;
+    height: 26px;
+    margin-top: 2px;
+  }
+
+  .axis-tick {
+    position: absolute;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .tick-mark {
+    width: 1px;
+    height: 6px;
+    background: var(--border-light);
+  }
+
+  .tick-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
     margin-top: 2px;
   }
 
