@@ -1,6 +1,13 @@
 import { writable } from "svelte/store";
-import { invoke } from "@tauri-apps/api/core";
 import type { NomEvent, Settings } from "../types";
+import {
+  getEvents,
+  saveEvent as storeSaveEvent,
+  deleteEvent as storeDeleteEvent,
+  getSettings,
+  saveSettings as storeSaveSettings,
+  checkNotifications as storeCheckNotifications,
+} from "../storage";
 
 export type Theme = "dark" | "light";
 
@@ -38,7 +45,7 @@ function createApp() {
 
     async loadEvents() {
       try {
-        const events = await invoke<NomEvent[]>("get_events");
+        const events = await getEvents();
         update((s) => ({
           ...s,
           events,
@@ -53,7 +60,7 @@ function createApp() {
 
     async loadSettings() {
       try {
-        const settings = await invoke<Settings>("get_settings");
+        const settings = await getSettings();
         update((s) => ({ ...s, settings }));
       } catch (e) {
         update((s) => ({ ...s, error: String(e) }));
@@ -62,7 +69,7 @@ function createApp() {
 
     async saveEvent(event: NomEvent) {
       try {
-        await invoke("save_event", { event });
+        await storeSaveEvent(event);
         await this.loadEvents();
       } catch (e) {
         update((s) => ({ ...s, error: String(e) }));
@@ -71,7 +78,7 @@ function createApp() {
 
     async deleteEvent(id: string) {
       try {
-        await invoke("delete_event", { id });
+        await storeDeleteEvent(id);
         update((s) => ({
           ...s,
           selectedEvent: s.selectedEvent?.id === id ? null : s.selectedEvent,
@@ -84,7 +91,7 @@ function createApp() {
 
     async saveSettings(settings: Settings) {
       try {
-        await invoke("save_settings", { settings });
+        await storeSaveSettings(settings);
         update((s) => ({ ...s, settings }));
       } catch (e) {
         update((s) => ({ ...s, error: String(e) }));
@@ -93,7 +100,7 @@ function createApp() {
 
     async checkNotifications() {
       try {
-        await invoke("check_notifications");
+        await storeCheckNotifications();
       } catch (_) {}
     },
 

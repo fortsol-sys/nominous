@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from "../stores/app";
   import type { Settings } from "../types";
-  import { invoke } from "@tauri-apps/api/core";
+  import { getAppLogs, clearAppLogs, exportData as storeExportData, backupData } from "../storage";
 
   let settings = $state<Settings>(
     structuredClone($app.settings ?? {
@@ -25,7 +25,7 @@
   $effect(() => {
     if (activeTab === "applogs") {
       logsLoading = true;
-      invoke<string[]>("get_app_logs")
+      getAppLogs()
         .then((lines) => { appLogs = lines; })
         .catch(() => { appLogs = []; })
         .finally(() => { logsLoading = false; });
@@ -36,7 +36,7 @@
     exportRunning = format;
     dataMsg = null;
     try {
-      const path = await invoke<string>(format === "json" ? "export_json" : "export_csv");
+      const path = await storeExportData(format);
       dataMsg = { kind: "ok", text: `Saved to: ${path}` };
     } catch (e) {
       dataMsg = { kind: "err", text: String(e) };
@@ -53,7 +53,7 @@
     backupRunning = true;
     dataMsg = null;
     try {
-      const ts = await invoke<string>("backup_data", { dest: backupPath.trim(), settings });
+      const ts = await backupData(backupPath.trim(), settings);
       lastBackup = ts;
       settings = { ...settings, backup_path: backupPath.trim(), last_backup: ts };
       dataMsg = { kind: "ok", text: `Backup complete — ${new Date(ts).toLocaleString()}` };
@@ -93,7 +93,7 @@
   }
 
   async function clearLogs() {
-    await invoke("clear_app_logs");
+    await clearAppLogs();
     appLogs = [];
   }
 </script>

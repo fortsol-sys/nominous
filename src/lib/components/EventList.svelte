@@ -2,7 +2,7 @@
   import { app } from "../stores/app";
   import type { NomEvent } from "../types";
   import EventCard from "./EventCard.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { exportData } from "../storage";
 
   let collapsed = $state(false);
   let search = $state("");
@@ -34,8 +34,7 @@
 
   async function doExport(format: "json" | "csv") {
     try {
-      const cmd = format === "json" ? "export_json" : "export_csv";
-      const path = await invoke<string>(cmd);
+      const path = await exportData(format);
       app.setSuccess(`Exported to: ${path}`);
     } catch (e) {
       app.clearSuccess();

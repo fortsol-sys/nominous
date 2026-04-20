@@ -1,6 +1,6 @@
 # Nominous
 
-A minimalist desktop app for counting down to the goals and events that matter. Built with Tauri 2 + Svelte 5.
+A minimalist app for counting down to the goals and events that matter. Runs as a **native desktop app** (Tauri 2 + Svelte 5) or as a **web app** via Docker.
 
 ![Dark mode](Meta/screenshots/dark.png)
 
@@ -19,7 +19,25 @@ A minimalist desktop app for counting down to the goals and events that matter. 
 
 ---
 
-## Prerequisites
+## Docker (web mode)
+
+No Rust or system dependencies required — just Docker.
+
+```bash
+# Clone and start
+git clone https://github.com/fortsol-sys/nominous.git
+cd nominous
+docker compose up --build
+# → http://localhost:3005
+```
+
+In web mode the app stores events and settings in browser `localStorage` instead of the filesystem. Export and backup actions trigger a browser download. All other features work identically to the desktop build.
+
+To add sibling services (API, database, etc.) edit `docker-compose.yml` — the commented stubs at the bottom are a starting point.
+
+---
+
+## Prerequisites (desktop)
 
 | Dependency | Version | Notes |
 |---|---|---|
@@ -59,7 +77,7 @@ Install the [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visua
 
 ---
 
-## Install & Run
+## Install & Run (desktop)
 
 ```bash
 # 1. Clone
@@ -106,6 +124,7 @@ nominous/
 │       │   └── LogsPanel.svelte        # Aggregated activity log
 │       ├── stores/
 │       │   └── app.ts          # Svelte writable store — global app state
+│       ├── storage.ts          # Storage abstraction (Tauri invoke ↔ localStorage)
 │       └── types.ts            # Shared TypeScript types
 ├── src-tauri/                  # Rust / Tauri backend
 │   ├── src/
@@ -117,6 +136,10 @@ nominous/
 │   └── tauri.conf.json         # App metadata, window config, CSP
 ├── Meta/
 │   └── Spec.md                 # Original product specification
+├── Dockerfile
+├── docker-compose.yml
+├── nginx.conf
+├── .dockerignore
 ├── package.json
 └── vite.config.ts
 ```
@@ -171,6 +194,8 @@ Settings (categories, priorities, notification defaults) are stored in `settings
 | IDs | `uuid v4` |
 | Date/time | `chrono` |
 | Notifications | `tauri-plugin-notification` |
+| Web storage | Browser `localStorage` (web/Docker mode) |
+| Container | Docker + nginx (web mode) |
 
 ---
 

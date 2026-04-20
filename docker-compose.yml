@@ -1,0 +1,31 @@
+services:
+  nominous:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3005:80"
+    restart: unless-stopped
+
+  # ── Future services ────────────────────────────────────────────────────────
+  # Add sibling apps here; they'll share the same Docker network and can reach
+  # each other by service name (e.g. http://api:4000).
+  #
+  # api:
+  #   build: ../some-api
+  #   ports:
+  #     - "4000:4000"
+  #   environment:
+  #     DATABASE_URL: postgres://postgres:postgres@db:5432/nominous
+  #
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: nominous
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   volumes:
+  #     - db_data:/var/lib/postgresql/data
+
+# volumes:
+#   db_data:
