@@ -4,6 +4,7 @@
   import TimelineView from "./TimelineView.svelte";
   import CalendarView from "./CalendarView.svelte";
   import HomeView from "./HomeView.svelte";
+  import LogSection from "./LogSection.svelte";
 
   let view = $state<"countdown" | "timeline" | "calendar">("countdown");
 </script>
@@ -37,7 +38,6 @@
             onclick={() => (view = "calendar")}
           >Calendar</button>
         </div>
-        <button class="btn btn-ghost" onclick={() => app.openCommentModal()}>+ Comment</button>
         <button class="btn btn-ghost" onclick={() => app.openAdd(event)}>Edit</button>
         <button
           class="btn btn-danger"
@@ -49,13 +49,18 @@
     </header>
 
     <div class="panel-content">
-      {#if view === "countdown"}
-        <CountdownView {event} />
-      {:else if view === "timeline"}
-        <TimelineView {event} />
-      {:else}
-        <CalendarView {event} />
-      {/if}
+      <div class="view-area">
+        {#if view === "countdown"}
+          <CountdownView {event} />
+        {:else if view === "timeline"}
+          <TimelineView {event} />
+        {:else}
+          <CalendarView {event} />
+        {/if}
+      </div>
+      <div class="log-area">
+        <LogSection {event} />
+      </div>
     </div>
   {:else}
     <HomeView />
@@ -138,8 +143,26 @@
 
   .panel-content {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .view-area {
+    flex: 1;
     overflow-y: auto;
     padding: 32px 40px;
+    min-height: 0;
+  }
+
+  .log-area {
+    flex: 0 0 42%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-top: 2px solid var(--border);
+    background: var(--surface);
   }
 
 </style>

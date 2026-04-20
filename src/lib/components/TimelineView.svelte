@@ -76,24 +76,51 @@
     $app.settings?.categories.find((c) => c.name === event.category)?.color ?? "#6366f1"
   );
 
+  let stagePending = $state<string | null>(null);
+  let stageComment = $state("");
+  let stageCommentInput = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    if (stagePending && stageCommentInput) {
+      stageCommentInput.focus();
+    }
+  });
+
   async function toggleStage(stage: Stage) {
-    const updated: NomEvent = {
+    if (stage.completed) {
+      // Un-completing — no prompt needed
+      await app.saveEvent({
+        ...event,
+        stages: event.stages.map((s) => s.id === stage.id ? { ...s, completed: false } : s),
+      });
+    } else {
+      stagePending = stage.id;
+      stageComment = "";
+    }
+  }
+
+  async function confirmStage() {
+    const stage = event.stages.find((s) => s.id === stagePending);
+    if (!stage) return;
+    const newLog = [
+      ...event.log,
+      { timestamp: new Date().toISOString(), kind: "stage_complete" as const, content: `Completed: ${stage.title}` },
+      ...(stageComment.trim()
+        ? [{ timestamp: new Date().toISOString(), kind: "comment" as const, content: stageComment.trim() }]
+        : []),
+    ];
+    await app.saveEvent({
       ...event,
-      stages: event.stages.map((s) =>
-        s.id === stage.id ? { ...s, completed: !s.completed } : s
-      ),
-      log: stage.completed
-        ? event.log
-        : [
-            ...event.log,
-            {
-              timestamp: new Date().toISOString(),
-              kind: "stage_complete" as const,
-              content: `Completed: ${stage.title}`,
-            },
-          ],
-    };
-    await app.saveEvent(updated);
+      stages: event.stages.map((s) => s.id === stagePending ? { ...s, completed: true } : s),
+      log: newLog,
+    });
+    stagePending = null;
+    stageComment = "";
+  }
+
+  function cancelStage() {
+    stagePending = null;
+    stageComment = "";
   }
 
   function fmtDate(s: string) {
@@ -179,27 +206,28 @@
               {/if}
             </div>
           </div>
+          {#if stagePending === stage.id}
+            <div class="stage-prompt">
+              <input
+                bind:this={stageCommentInput}
+                class="stage-comment-input"
+                type="text"
+                placeholder="Add a note for this completion… (optional)"
+                bind:value={stageComment}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); confirmStage(); }
+                  if (e.key === "Escape") cancelStage();
+                }}
+              />
+              <button class="btn btn-primary btn-xs" onclick={confirmStage}>Done</button>
+              <button class="btn btn-ghost btn-xs" onclick={cancelStage}>Skip</button>
+            </div>
+          {/if}
         {/each}
       </div>
     </section>
   {/if}
 
-  {#if event.log.length > 0}
-    <section class="section">
-      <h3 class="section-title">Log</h3>
-      <div class="log-list">
-        {#each [...event.log].reverse() as entry (entry.timestamp)}
-          <div class="log-item">
-            <div class="log-dot" class:stage={entry.kind !== "comment"}></div>
-            <div class="log-body">
-              <span class="log-content">{entry.content}</span>
-              <span class="log-time">{fmtDate(entry.timestamp)}</span>
-            </div>
-          </div>
-        {/each}
-      </div>
-    </section>
-  {/if}
 </div>
 
 <style>
@@ -406,35 +434,30 @@
   .stage-title { font-size: 14px; color: var(--text-primary); }
   .stage-date { font-size: 12px; color: var(--text-muted); }
 
-  .log-list {
+  .stage-prompt {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 4px 30px;
+    animation: slideDown 0.15s ease;
   }
 
-  .log-item {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
+  .stage-comment-input {
+    flex: 1;
+    font-size: 12px;
+    padding: 5px 8px;
+    height: 30px;
   }
 
-  .log-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--border-light);
-    margin-top: 5px;
+  .btn-xs {
+    padding: 4px 10px;
+    font-size: 12px;
+    height: 28px;
     flex-shrink: 0;
   }
 
-  .log-dot.stage { background: var(--accent); }
-
-  .log-body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-
-  .log-content { font-size: 13px; color: var(--text-primary); }
-  .log-time { font-size: 11px; color: var(--text-muted); }
 </style>
