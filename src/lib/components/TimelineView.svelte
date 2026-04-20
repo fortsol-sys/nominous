@@ -1,0 +1,365 @@
+<script lang="ts">
+  import type { NomEvent, Stage } from "../types";
+  import { app } from "../stores/app";
+
+  let { event }: { event: NomEvent } = $props();
+
+  let now = $state(new Date());
+
+  $effect(() => {
+    const id = setInterval(() => { now = new Date(); }, 30000);
+    return () => clearInterval(id);
+  });
+
+  const start = $derived(new Date(event.created_at).getTime());
+  const end = $derived(new Date(event.target_date).getTime());
+  const total = $derived(end - start);
+  const elapsed = $derived(now.getTime() - start);
+  const progress = $derived(Math.min(100, Math.max(0, (elapsed / total) * 100)));
+
+  function pct(ts: number) {
+    return Math.min(100, Math.max(0, ((ts - start) / total) * 100));
+  }
+
+  const stageMarkers = $derived(
+    event.stages
+      .map((s) => ({ ...s, pct: s.date ? pct(new Date(s.date).getTime()) : null }))
+      .filter((s) => s.pct !== null)
+  );
+
+  const commentMarkers = $derived(
+    event.log
+      .filter((e) => e.kind === "comment")
+      .map((e) => ({ ...e, pct: pct(new Date(e.timestamp).getTime()) }))
+      .filter((e) => e.pct >= 0 && e.pct <= 100)
+  );
+
+  const catColor = $derived(
+    $app.settings?.categories.find((c) => c.name === event.category)?.color ?? "#6366f1"
+  );
+
+  async function toggleStage(stage: Stage) {
+    const updated: NomEvent = {
+      ...event,
+      stages: event.stages.map((s) =>
+        s.id === stage.id ? { ...s, completed: !s.completed } : s
+      ),
+      log: stage.completed
+        ? event.log
+        : [
+            ...event.log,
+            {
+              timestamp: new Date().toISOString(),
+              kind: "stage_complete" as const,
+              content: `Completed: ${stage.title}`,
+            },
+          ],
+    };
+    await app.saveEvent(updated);
+  }
+
+  function fmtDate(s: string) {
+    return new Date(s).toLocaleDateString(undefined, {
+      month: "short", day: "numeric", year: "numeric",
+    });
+  }
+
+  function fmtDateShort(s: string) {
+    return new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+</script>
+
+<div class="timeline-wrap">
+  <div class="bar-section">
+    <div class="bar-labels">
+      <span>{fmtDateShort(event.created_at)}</span>
+      <span>{fmtDateShort(event.target_date)}</span>
+    </div>
+
+    <div class="bar-container">
+      <div class="markers-above">
+        {#each stageMarkers as stage}
+          <div class="stage-marker" style="left: {stage.pct}%">
+            <div
+              class="stage-dot"
+              class:completed={stage.completed}
+              style="border-color: {catColor}; {stage.completed ? `background: ${catColor}` : ''}"
+              title={stage.title}
+            ></div>
+            <span class="stage-label">{stage.title}</span>
+          </div>
+        {/each}
+      </div>
+
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {progress}%; background: {catColor}"></div>
+        {#each commentMarkers as c}
+          <div class="comment-dot" style="left: {c.pct}%" title={c.content}></div>
+        {/each}
+        {#if progress > 0 && progress < 100}
+          <div class="now-cursor" style="left: {progress}%">
+            <div class="now-line"></div>
+            <span class="now-label">now</span>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <div class="progress-label">
+      <span style="color: {catColor}; font-weight: 700">{progress.toFixed(1)}%</span>
+      <span class="text-muted"> elapsed</span>
+    </div>
+  </div>
+
+  {#if event.stages.length > 0}
+    <section class="section">
+      <h3 class="section-title">Stages</h3>
+      <div class="stage-list">
+        {#each event.stages as stage (stage.id)}
+          <div class="stage-item" class:completed={stage.completed}>
+            <button
+              class="stage-check"
+              onclick={() => toggleStage(stage)}
+              style="border-color: {catColor}; {stage.completed ? `background: ${catColor}` : ''}"
+            >
+              {#if stage.completed}<span class="check-icon">✓</span>{/if}
+            </button>
+            <div class="stage-info">
+              <span class="stage-title">{stage.title}</span>
+              {#if stage.date}
+                <span class="stage-date">{fmtDate(stage.date)}</span>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
+  {#if event.log.length > 0}
+    <section class="section">
+      <h3 class="section-title">Log</h3>
+      <div class="log-list">
+        {#each [...event.log].reverse() as entry (entry.timestamp)}
+          <div class="log-item">
+            <div class="log-dot" class:stage={entry.kind !== "comment"}></div>
+            <div class="log-body">
+              <span class="log-content">{entry.content}</span>
+              <span class="log-time">{fmtDate(entry.timestamp)}</span>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+</div>
+
+<style>
+  .timeline-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    max-width: 720px;
+  }
+
+  .bar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .bar-container {
+    position: relative;
+  }
+
+  .markers-above {
+    position: relative;
+    height: 44px;
+    margin-bottom: 4px;
+  }
+
+  .stage-marker {
+    position: absolute;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .stage-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  .stage-dot.completed {
+    border-color: transparent;
+  }
+
+  .stage-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--surface-active);
+    border-radius: 4px;
+    overflow: visible;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s linear;
+  }
+
+  .comment-dot {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    border: 2px solid var(--bg);
+    cursor: default;
+  }
+
+  .now-cursor {
+    position: absolute;
+    top: -4px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .now-line {
+    width: 2px;
+    height: 16px;
+    background: var(--text-secondary);
+    border-radius: 1px;
+  }
+
+  .now-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .progress-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+
+  .text-muted { color: var(--text-muted); }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .stage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .stage-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .stage-item.completed .stage-title {
+    text-decoration: line-through;
+    color: var(--text-muted);
+  }
+
+  .stage-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+
+  .check-icon {
+    font-size: 10px;
+    color: white;
+    font-weight: 700;
+  }
+
+  .stage-info {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .stage-title { font-size: 14px; color: var(--text-primary); }
+  .stage-date { font-size: 12px; color: var(--text-muted); }
+
+  .log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .log-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .log-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-light);
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  .log-dot.stage { background: var(--accent); }
+
+  .log-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .log-content { font-size: 13px; color: var(--text-primary); }
+  .log-time { font-size: 11px; color: var(--text-muted); }
+</style>
