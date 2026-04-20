@@ -12,6 +12,9 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::check_notifications,
+            commands::export_json,
+            commands::export_csv,
+            commands::backup_data,
             commands::get_app_logs,
             commands::clear_app_logs,
         ])

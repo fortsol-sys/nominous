@@ -2,6 +2,7 @@
   import { app } from "../stores/app";
   import type { NomEvent } from "../types";
   import EventCard from "./EventCard.svelte";
+  import { invoke } from "@tauri-apps/api/core";
 
   let collapsed = $state(false);
   let search = $state("");
@@ -29,6 +30,16 @@
 
   function catColor(name: string) {
     return $app.settings?.categories.find((c) => c.name === name)?.color ?? "#6366f1";
+  }
+
+  async function doExport(format: "json" | "csv") {
+    try {
+      const cmd = format === "json" ? "export_json" : "export_csv";
+      const path = await invoke<string>(cmd);
+      app.setSuccess(`Exported to: ${path}`);
+    } catch (e) {
+      app.clearSuccess();
+    }
   }
 </script>
 
@@ -113,6 +124,11 @@
       <button class="btn btn-primary add-btn" onclick={() => app.openAdd()}>
         + New Event
       </button>
+      <div class="export-row">
+        <span class="export-label">Export</span>
+        <button class="btn btn-ghost export-btn" onclick={() => doExport("json")} title="Export all events as JSON">JSON</button>
+        <button class="btn btn-ghost export-btn" onclick={() => doExport("csv")} title="Export all events as CSV">CSV</button>
+      </div>
     </div>
   </div>
 </aside>
@@ -280,8 +296,11 @@
   }
 
   .sidebar-footer {
-    padding: 12px;
+    padding: 10px 12px 12px;
     border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .add-btn {
@@ -289,5 +308,34 @@
     justify-content: center;
     padding: 8px 14px;
     font-size: 13px;
+  }
+
+  .export-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .export-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  .export-btn {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+  }
+
+  .export-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
   }
 </style>

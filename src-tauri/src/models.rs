@@ -53,4 +53,8 @@ pub struct Settings {
     pub categories: Vec<Category>,
     pub priorities: Vec<Priority>,
     pub default_notifications: Vec<NotificationRule>,
+    #[serde(default)]
+    pub backup_path: Option<String>,
+    #[serde(default)]
+    pub last_backup: Option<String>,
 }

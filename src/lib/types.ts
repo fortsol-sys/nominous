@@ -44,4 +44,6 @@ export interface Settings {
   categories: Category[];
   priorities: Priority[];
   default_notifications: NotificationRule[];
+  backup_path?: string;
+  last_backup?: string;
 }

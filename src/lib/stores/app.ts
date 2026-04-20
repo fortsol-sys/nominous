@@ -14,6 +14,7 @@ interface AppState {
   showLogs: boolean;
   editingEvent: NomEvent | null;
   error: string | null;
+  success: string | null;
   theme: Theme;
 }
 
@@ -28,6 +29,7 @@ function createApp() {
     showLogs: false,
     editingEvent: null,
     error: null,
+    success: null,
     theme: "dark",
   });
 
@@ -137,6 +139,14 @@ function createApp() {
 
     clearError() {
       update((s) => ({ ...s, error: null }));
+    },
+
+    setSuccess(msg: string) {
+      update((s) => ({ ...s, success: msg }));
+    },
+
+    clearSuccess() {
+      update((s) => ({ ...s, success: null }));
     },
 
     setTheme(theme: Theme) {

@@ -18,6 +18,23 @@ fn notifications_sent_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("notifications_sent.json"))
 }
 
+fn export_dir(app: &AppHandle) -> PathBuf {
+    app.path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .unwrap_or_else(|_| {
+            app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."))
+        })
+}
+
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
 fn app_log_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("nominous.log"))
 }
@@ -160,6 +177,90 @@ pub fn delete_event(app: AppHandle, id: String) -> Result<(), String> {
     }
     log_app(&app, "INFO", &format!("Deleted event: {}", id));
     Ok(())
+}
+
+#[tauri::command]
+pub fn export_json(app: AppHandle) -> Result<String, String> {
+    let events = load_events(&data_dir(&app)?)?;
+    let json = serde_json::to_string_pretty(&events).map_err(|e| e.to_string())?;
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let path = export_dir(&app).join(format!("nominous-export-{}.json", ts));
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    log_app(&app, "INFO", &format!("Exported JSON: {:?}", path));
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_csv(app: AppHandle) -> Result<String, String> {
+    let events = load_events(&data_dir(&app)?)?;
+    let now = chrono::Local::now();
+    let mut csv = String::from(
+        "id,name,category,priority,target_date,created_at,status,stages_total,stages_completed,log_entries\n",
+    );
+    for event in &events {
+        let status = if let Some(target) = parse_date(&event.target_date) {
+            if target < now { "done" } else { "active" }
+        } else {
+            "unknown"
+        };
+        let stages_done = event.stages.iter().filter(|s| s.completed).count();
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{}\n",
+            csv_escape(&event.id),
+            csv_escape(&event.name),
+            csv_escape(&event.category),
+            csv_escape(&event.priority),
+            csv_escape(&event.target_date),
+            csv_escape(&event.created_at),
+            status,
+            event.stages.len(),
+            stages_done,
+            event.log.len(),
+        ));
+    }
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let path = export_dir(&app).join(format!("nominous-export-{}.csv", ts));
+    fs::write(&path, csv).map_err(|e| e.to_string())?;
+    log_app(&app, "INFO", &format!("Exported CSV: {:?}", path));
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn backup_data(app: AppHandle, dest: String, settings: Settings) -> Result<String, String> {
+    if dest.trim().is_empty() {
+        return Err("Backup path cannot be empty".into());
+    }
+    let dest_path = PathBuf::from(&dest);
+    fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
+
+    let events_src = data_dir(&app)?;
+    let events_dest = dest_path.join("events");
+    fs::create_dir_all(&events_dest).map_err(|e| e.to_string())?;
+    if events_src.exists() {
+        for entry in fs::read_dir(&events_src).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if entry.path().extension().and_then(|e| e.to_str()) == Some("md") {
+                fs::copy(entry.path(), events_dest.join(entry.file_name()))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    let settings_src = settings_path(&app)?;
+    if settings_src.exists() {
+        fs::copy(&settings_src, dest_path.join("settings.json")).map_err(|e| e.to_string())?;
+    }
+
+    let ts = chrono::Local::now().to_rfc3339();
+    let mut updated = settings.clone();
+    updated.backup_path = Some(dest.clone());
+    updated.last_backup = Some(ts.clone());
+    let content = serde_json::to_string_pretty(&updated).map_err(|e| e.to_string())?;
+    fs::create_dir_all(settings_src.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::write(&settings_src, content).map_err(|e| e.to_string())?;
+
+    log_app(&app, "INFO", &format!("Backup completed to {:?}", dest_path));
+    Ok(ts)
 }
 
 #[tauri::command]

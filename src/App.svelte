@@ -45,9 +45,16 @@
 {/if}
 
 {#if $app.error}
-  <div class="error-toast" role="alert">
+  <div class="toast error-toast" role="alert">
     <span>{$app.error}</span>
     <button onclick={() => app.clearError()}>✕</button>
+  </div>
+{/if}
+
+{#if $app.success}
+  <div class="toast success-toast" role="status">
+    <span>{$app.success}</span>
+    <button onclick={() => app.clearSuccess()}>✕</button>
   </div>
 {/if}
 
@@ -59,11 +66,10 @@
     background: var(--bg);
   }
 
-  .error-toast {
+  .toast {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background: var(--error);
     color: white;
     padding: 10px 16px;
     border-radius: var(--radius);
@@ -72,14 +78,18 @@
     gap: 12px;
     font-size: 13px;
     z-index: 9999;
-    max-width: 360px;
+    max-width: 420px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   }
 
-  .error-toast button {
+  .error-toast { background: var(--error); }
+  .success-toast { background: var(--success); bottom: 70px; }
+
+  .toast button {
     color: white;
     opacity: 0.8;
     font-size: 14px;
     flex-shrink: 0;
   }
-  .error-toast button:hover { opacity: 1; }
+  .toast button:hover { opacity: 1; }
 </style>

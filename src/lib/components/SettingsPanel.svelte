@@ -15,6 +15,13 @@
   let appLogs = $state<string[]>([]);
   let logsLoading = $state(false);
 
+  // Data tab state — read directly from the store snapshot to avoid $state-in-$state warning
+  let backupPath = $state($app.settings?.backup_path ?? "");
+  let lastBackup = $state($app.settings?.last_backup ?? "");
+  let backupRunning = $state(false);
+  let exportRunning = $state<"json" | "csv" | null>(null);
+  let dataMsg = $state<{ kind: "ok" | "err"; text: string } | null>(null);
+
   $effect(() => {
     if (activeTab === "applogs") {
       logsLoading = true;
@@ -24,6 +31,42 @@
         .finally(() => { logsLoading = false; });
     }
   });
+
+  async function exportData(format: "json" | "csv") {
+    exportRunning = format;
+    dataMsg = null;
+    try {
+      const path = await invoke<string>(format === "json" ? "export_json" : "export_csv");
+      dataMsg = { kind: "ok", text: `Saved to: ${path}` };
+    } catch (e) {
+      dataMsg = { kind: "err", text: String(e) };
+    } finally {
+      exportRunning = null;
+    }
+  }
+
+  async function runBackup() {
+    if (!backupPath.trim()) {
+      dataMsg = { kind: "err", text: "Enter a backup folder path first." };
+      return;
+    }
+    backupRunning = true;
+    dataMsg = null;
+    try {
+      const ts = await invoke<string>("backup_data", { dest: backupPath.trim(), settings });
+      lastBackup = ts;
+      settings = { ...settings, backup_path: backupPath.trim(), last_backup: ts };
+      dataMsg = { kind: "ok", text: `Backup complete — ${new Date(ts).toLocaleString()}` };
+    } catch (e) {
+      dataMsg = { kind: "err", text: String(e) };
+    } finally {
+      backupRunning = false;
+    }
+  }
+
+  function fmtBackupDate(ts: string) {
+    try { return new Date(ts).toLocaleString(); } catch { return ts; }
+  }
 
   function addCategory() {
     settings.categories = [...settings.categories, { name: "New Category", color: "#6366f1" }];
@@ -138,13 +181,106 @@
     </div>
 
   {:else}
-    <div class="tab-body centered">
-      <div class="placeholder-icon">☁</div>
-      <p class="placeholder-title">Data Connections</p>
-      <p class="placeholder-desc">
-        Configure storage backends — local file server, cloud storage (S3, Dropbox), or sync services.<br />
-        Coming in a future release.
-      </p>
+    <div class="data-body">
+      {#if dataMsg}
+        <div class="data-msg" class:ok={dataMsg.kind === "ok"} class:err={dataMsg.kind === "err"}>
+          {dataMsg.text}
+          <button onclick={() => (dataMsg = null)}>✕</button>
+        </div>
+      {/if}
+
+      <!-- Export -->
+      <section class="data-section">
+        <div class="data-section-head">
+          <h2 class="data-section-title">Export</h2>
+          <p class="data-section-desc">Download all your events, stages, and activity as a portable file.</p>
+        </div>
+        <div class="export-actions">
+          <div class="export-card">
+            <div class="export-card-info">
+              <span class="export-card-name">JSON</span>
+              <span class="export-card-detail">Full data — all fields, log entries, stages</span>
+            </div>
+            <button
+              class="btn btn-primary"
+              disabled={!!exportRunning}
+              onclick={() => exportData("json")}
+            >{exportRunning === "json" ? "Exporting…" : "Export JSON"}</button>
+          </div>
+          <div class="export-card">
+            <div class="export-card-info">
+              <span class="export-card-name">CSV</span>
+              <span class="export-card-detail">Summary table — opens in Excel / Google Sheets</span>
+            </div>
+            <button
+              class="btn btn-primary"
+              disabled={!!exportRunning}
+              onclick={() => exportData("csv")}
+            >{exportRunning === "csv" ? "Exporting…" : "Export CSV"}</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="data-divider"></div>
+
+      <!-- Local Backup -->
+      <section class="data-section">
+        <div class="data-section-head">
+          <h2 class="data-section-title">Local Backup</h2>
+          <p class="data-section-desc">Copy your event files and settings to any folder on your machine.</p>
+        </div>
+        <div class="backup-form">
+          <label for="backup-path">Backup folder path</label>
+          <div class="backup-input-row">
+            <input
+              id="backup-path"
+              type="text"
+              placeholder="/home/user/Documents/Nominous Backup"
+              bind:value={backupPath}
+            />
+            <button
+              class="btn btn-primary"
+              disabled={backupRunning || !backupPath.trim()}
+              onclick={runBackup}
+            >{backupRunning ? "Backing up…" : "Backup Now"}</button>
+          </div>
+          {#if lastBackup}
+            <p class="backup-last">Last backup: {fmtBackupDate(lastBackup)}</p>
+          {:else}
+            <p class="backup-last muted">No backup recorded yet.</p>
+          {/if}
+        </div>
+      </section>
+
+      <div class="data-divider"></div>
+
+      <!-- Cloud / Remote (planned) -->
+      <section class="data-section">
+        <div class="data-section-head">
+          <h2 class="data-section-title">
+            Cloud &amp; Remote Storage
+            <span class="coming-soon">Coming soon</span>
+          </h2>
+          <p class="data-section-desc">Sync your data to a remote storage provider automatically.</p>
+        </div>
+        <div class="cloud-grid">
+          {#each [
+            { name: "Dropbox", icon: "◈", desc: "Sync via Dropbox API" },
+            { name: "Amazon S3", icon: "◉", desc: "S3-compatible object storage" },
+            { name: "WebDAV / File Server", icon: "⊞", desc: "HTTP-based file server" },
+            { name: "Custom Script", icon: "⌘", desc: "Run a script after each save" },
+          ] as provider}
+            <div class="cloud-card disabled">
+              <span class="cloud-icon">{provider.icon}</span>
+              <div class="cloud-info">
+                <span class="cloud-name">{provider.name}</span>
+                <span class="cloud-desc">{provider.desc}</span>
+              </div>
+              <button class="btn btn-ghost" disabled>Set up</button>
+            </div>
+          {/each}
+        </div>
+      </section>
     </div>
   {/if}
 </div>
@@ -314,20 +450,171 @@
   }
 
   /* Data tab */
-  .placeholder-icon {
-    font-size: 48px;
-    opacity: 0.2;
+  .data-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 680px;
   }
 
-  .placeholder-title {
-    font-size: 15px;
+  .data-msg {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .data-msg.ok  { background: rgba(34,197,94,0.12); color: var(--success); }
+  .data-msg.err { background: rgba(239,68,68,0.12);  color: var(--error); }
+  .data-msg button { font-size: 13px; opacity: 0.7; }
+  .data-msg button:hover { opacity: 1; }
+
+  .data-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 4px 0 28px;
+  }
+
+  .data-section-head { display: flex; flex-direction: column; gap: 4px; }
+
+  .data-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .data-section-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .data-divider {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 28px;
+  }
+
+  .coming-soon {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    background: var(--surface-active);
+    padding: 2px 7px;
+    border-radius: 99px;
+  }
+
+  /* Export cards */
+  .export-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .export-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .export-card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .export-card-name {
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
   }
 
-  .placeholder-desc {
-    font-size: 13px;
+  .export-card-detail {
+    font-size: 12px;
     color: var(--text-muted);
-    line-height: 1.7;
+  }
+
+  /* Backup form */
+  .backup-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .backup-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .backup-input-row input { flex: 1; }
+
+  .backup-last {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .backup-last.muted { color: var(--text-muted); }
+
+  /* Cloud grid */
+  .cloud-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cloud-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .cloud-card.disabled { opacity: 0.45; }
+
+  .cloud-icon {
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+
+  .cloud-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .cloud-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .cloud-desc {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 </style>
